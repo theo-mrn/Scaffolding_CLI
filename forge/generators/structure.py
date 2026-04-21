@@ -24,7 +24,16 @@ def generate_structure(project_dir: Path, project_type: str, project_name: str) 
 
 
 def _run(cmd: list[str], cwd: Path) -> None:
-    subprocess.run(cmd, cwd=cwd, check=True, capture_output=True)
+    try:
+        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode().strip() if e.stderr else ""
+        label = " ".join(cmd[:2])
+        msg = f"'{label}' failed (exit {e.returncode})"
+        if stderr:
+            msg += f"\n  {stderr}"
+        console.print(f"[red]Error:[/red] {msg}")
+        raise typer.Exit(1)
 
 
 def _require(binary: str) -> None:

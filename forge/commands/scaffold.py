@@ -61,7 +61,12 @@ def run_scaffold(
         progress.update(task, description="[green]✓[/green] Terraform module generated")
 
         task = progress.add_task("Initialising git repository...", total=None)
-        _git_init(project_dir, name)
+        try:
+            _git_init(project_dir, name)
+        except RuntimeError as e:
+            progress.stop()
+            console.print(f"\n[red]Git error:[/red] {e}")
+            raise typer.Exit(1)
         progress.update(task, description="[green]✓[/green] Git repository initialised")
 
         repo_url: str | None = None
@@ -84,7 +89,7 @@ def run_scaffold(
                     task = progress.add_task("Setting CI/CD secrets...", total=None)
                     set_repo_secrets(name, _parse_secrets(ci_secrets))
                     progress.update(task, description="[green]✓[/green] CI/CD secrets configured")
-            except GitHubError as e:
+            except (GitHubError, RuntimeError) as e:
                 progress.stop()
                 console.print(f"\n[red]Erreur GitHub :[/red] {e}")
                 console.print("[dim]Le projet a été créé localement — configure le repo GitHub manuellement.[/dim]")
@@ -102,34 +107,32 @@ def _resolve_output_dir(output_dir: Path) -> Path:
     return output_dir
 
 
-def _git_init(project_dir: Path, project_name: str) -> None:
+def _git_run(cmd: list[str], cwd: Path) -> None:
     import subprocess
 
-    subprocess.run(["git", "init", "-b", "main"], cwd=project_dir, check=True, capture_output=True)
-    subprocess.run(["git", "add", "."], cwd=project_dir, check=True, capture_output=True)
-    subprocess.run(
+    try:
+        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        stderr = e.stderr.decode().strip() if e.stderr else ""
+        label = " ".join(cmd[:3])
+        msg = f"'{label}' failed (exit {e.returncode})"
+        if stderr:
+            msg += f"\n  {stderr}"
+        raise RuntimeError(msg)
+
+
+def _git_init(project_dir: Path, project_name: str) -> None:
+    _git_run(["git", "init", "-b", "main"], cwd=project_dir)
+    _git_run(["git", "add", "."], cwd=project_dir)
+    _git_run(
         ["git", "commit", "-m", f"chore: initial scaffold for {project_name}"],
         cwd=project_dir,
-        check=True,
-        capture_output=True,
     )
 
 
 def _git_push(project_dir: Path, repo_url: str) -> None:
-    import subprocess
-
-    subprocess.run(
-        ["git", "remote", "add", "origin", repo_url],
-        cwd=project_dir,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "push", "-u", "origin", "main"],
-        cwd=project_dir,
-        check=True,
-        capture_output=True,
-    )
+    _git_run(["git", "remote", "add", "origin", repo_url], cwd=project_dir)
+    _git_run(["git", "push", "-u", "origin", "main"], cwd=project_dir)
 
 
 def _parse_secrets(raw: str) -> dict:

@@ -74,8 +74,13 @@ def test_generate_structure_fastapi(mock_run, project_dir: Path) -> None:
 
 @patch("forge.generators.structure._run")
 def test_generate_structure_node(mock_run, project_dir: Path) -> None:
+    import json
+    # simulate npm init -y creating package.json
+    (project_dir / "package.json").write_text(json.dumps({"name": "my-project", "version": "1.0.0"}))
     generate_structure(project_dir, "node", "my-project")
     assert (project_dir / "src" / "index.js").exists()
+    pkg = json.loads((project_dir / "package.json").read_text())
+    assert "start" in pkg["scripts"]
     mock_run.assert_called()
 
 

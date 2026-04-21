@@ -7,6 +7,7 @@ import typer
 
 from forge.commands.scaffold import console, run_scaffold
 from forge.config.settings import settings
+from forge.config.store import load_stored_token, save_token
 
 app = typer.Typer(help="Interactively scaffold a new project.")
 
@@ -36,8 +37,13 @@ def init(
     ci_secrets = ""
     if setup_github:
         if not settings.github_token:
+            settings.github_token = load_stored_token()
+
+        if not settings.github_token:
             token = typer.prompt("  GitHub token", hide_input=True)
             settings.github_token = token
+            save_token(token)
+            console.print("  [dim]Token saved to ~/.config/forge/config.toml[/dim]")
 
     skip_github = not setup_github
 
