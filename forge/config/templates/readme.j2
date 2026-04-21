@@ -1,0 +1,32 @@
+# {{ project_name }}
+
+> Scaffolded with [forge](https://github.com/your-org/forge) — {{ project_type }} project.
+
+## Getting started
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+## Project structure
+
+```
+{{ project_name }}/
+├── src/          # Application source code
+├── tests/        # Test suite
+├── terraform/    # Infrastructure as code
+├── Dockerfile
+└── .gitignore
+```
+
+## Infrastructure
+
+Terraform module located in `terraform/`. Initialise with:
+
+```bash
+cd terraform
+terraform init
+terraform plan
+```
