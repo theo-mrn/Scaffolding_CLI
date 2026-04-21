@@ -67,13 +67,14 @@ def test_set_repo_secrets(monkeypatch) -> None:
 
     from forge.github.secrets import set_repo_secrets
 
+    from nacl.public import PrivateKey
+    import base64
+    real_public_key = base64.b64encode(bytes(PrivateKey.generate().public_key)).decode()
+
     respx.get(f"{GITHUB_API}/repos/my-org/my-project/actions/secrets/public-key").mock(
         return_value=httpx.Response(
             200,
-            json={
-                "key_id": "123",
-                "key": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-            },
+            json={"key_id": "123", "key": real_public_key},
         )
     )
     respx.put(f"{GITHUB_API}/repos/my-org/my-project/actions/secrets/MY_SECRET").mock(

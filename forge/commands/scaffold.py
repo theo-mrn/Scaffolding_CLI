@@ -12,6 +12,7 @@ from forge.generators.gitignore import generate_gitignore
 from forge.generators.readme import generate_readme
 from forge.generators.terraform import generate_terraform
 from forge.generators.structure import generate_structure
+from forge.generators.ci import generate_ci
 from forge.github.repo import create_github_repo
 from forge.github.branch_protection import set_branch_protection
 from forge.github.secrets import set_repo_secrets
@@ -27,6 +28,9 @@ def run_scaffold(
     skip_github: bool,
     private: bool,
     ci_secrets: str,
+    docker: bool = False,
+    sonar: bool = False,
+    docker_secrets: dict | None = None,
 ) -> None:
     output_dir = _resolve_output_dir(output_dir)
     project_dir = output_dir / name
@@ -60,6 +64,10 @@ def run_scaffold(
         generate_terraform(project_dir, name)
         progress.update(task, description="[green]✓[/green] Terraform module generated")
 
+        task = progress.add_task("Generating GitHub Actions CI...", total=None)
+        generate_ci(project_dir, project_type, project_name=name, docker=docker, sonar=sonar)
+        progress.update(task, description="[green]✓[/green] GitHub Actions CI generated")
+
         task = progress.add_task("Initialising git repository...", total=None)
         try:
             _git_init(project_dir, name)
@@ -85,9 +93,14 @@ def run_scaffold(
                 set_branch_protection(name)
                 progress.update(task, description="[green]✓[/green] Branch protection rules applied")
 
+                all_secrets: dict = {}
                 if ci_secrets:
+                    all_secrets.update(_parse_secrets(ci_secrets))
+                if docker and docker_secrets:
+                    all_secrets.update(docker_secrets)
+                if all_secrets:
                     task = progress.add_task("Setting CI/CD secrets...", total=None)
-                    set_repo_secrets(name, _parse_secrets(ci_secrets))
+                    set_repo_secrets(name, all_secrets)
                     progress.update(task, description="[green]✓[/green] CI/CD secrets configured")
             except (GitHubError, RuntimeError) as e:
                 progress.stop()

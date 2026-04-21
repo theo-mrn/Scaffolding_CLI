@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+{% if job_lint %}
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+
+{% endif %}
+{% if job_test %}
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Tests with coverage
+        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+{% if test_secret_keys %}
+        env:
+{% for key in test_secret_keys %}
+          {{ key }}: {% raw %}${{ secrets.{% endraw %}{{ key }}{% raw %} }}{% endraw %}
+{% endfor %}
+{% endif %}
+
+      - name: Coverage threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Coverage: $COVERAGE%"
+          awk "BEGIN { if ($COVERAGE < {{ coverage_threshold }}) { print \"Coverage below {{ coverage_threshold }}%\"; exit 1 } }"
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: {% raw %}${{ always() }}{% endraw %}
+        with:
+          files: coverage.out
+
+{% endif %}
+{% if job_security %}
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Vulnerability scan
+        run: govulncheck ./...
+{% if sonar %}
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          GITHUB_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          SONAR_TOKEN: {% raw %}${{ secrets.SONAR_TOKEN }}{% endraw %}
+        with:
+          args: >
+            -Dsonar.projectKey={{ sonar_project_key }}
+            -Dsonar.organization={{ sonar_organization }}
+{% endif %}
+
+{% endif %}
+{% if docker %}
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (verify)
+        uses: docker/build-push-action@v5
+        with:
+          push: false
+{% endif %}

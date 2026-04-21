@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+{% if job_lint %}
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint --if-present
+
+      - name: Prettier
+        run: npx prettier --check . --ignore-unknown
+
+{% endif %}
+{% if job_test %}
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+{% if test_tool == "vitest" %}
+      - name: Tests with coverage
+        run: npx vitest run --coverage
+{% else %}
+      - name: Tests with coverage
+        run: npx jest --coverage --coverageThreshold='{"global":{"lines":{{ coverage_threshold }}}}' --passWithNoTests
+{% endif %}
+{% if test_secret_keys %}
+        env:
+{% for key in test_secret_keys %}
+          {{ key }}: {% raw %}${{ secrets.{% endraw %}{{ key }}{% raw %} }}{% endraw %}
+{% endfor %}
+{% endif %}
+
+{% endif %}
+{% if job_security %}
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit
+        run: npm audit --audit-level=high
+{% if sonar %}
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          GITHUB_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          SONAR_TOKEN: {% raw %}${{ secrets.SONAR_TOKEN }}{% endraw %}
+        with:
+          args: >
+            -Dsonar.projectKey={{ sonar_project_key }}
+            -Dsonar.organization={{ sonar_organization }}
+{% endif %}
+
+{% endif %}
+{% if docker %}
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (verify)
+        uses: docker/build-push-action@v5
+        with:
+          push: false
+{% endif %}

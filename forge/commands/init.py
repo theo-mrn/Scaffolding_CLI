@@ -32,18 +32,35 @@ def init(
         raise typer.Exit(0)
 
     private = typer.confirm("  Private repository?", default=True)
-    setup_github = typer.confirm("  Set up GitHub? (create repo, branch protection, secrets)", default=True)
+    setup_github = typer.confirm("  Set up GitHub? (create repo, branch protection)", default=True)
 
     ci_secrets = ""
+    docker = False
+    sonar = False
+    docker_secrets: dict = {}
+
     if setup_github:
         if not settings.github_token:
             settings.github_token = load_stored_token()
-
         if not settings.github_token:
             token = typer.prompt("  GitHub token", hide_input=True)
             settings.github_token = token
             save_token(token)
             console.print("  [dim]Token saved to ~/.config/forge/config.toml[/dim]")
+
+        docker = typer.confirm("  Enable Docker build & push in CI?", default=False)
+        if docker:
+            docker_username = typer.prompt("  Docker username")
+            docker_password = typer.prompt("  Docker password/token", hide_input=True)
+            docker_secrets = {
+                "DOCKER_USERNAME": docker_username,
+                "DOCKER_PASSWORD": docker_password,
+            }
+
+        sonar = typer.confirm("  Enable SonarCloud? (requires SONAR_TOKEN)", default=False)
+        if sonar:
+            sonar_token = typer.prompt("  SonarCloud token", hide_input=True)
+            docker_secrets["SONAR_TOKEN"] = sonar_token
 
     skip_github = not setup_github
 
@@ -56,4 +73,7 @@ def init(
         skip_github=skip_github,
         private=private,
         ci_secrets=ci_secrets,
+        docker=docker,
+        sonar=sonar,
+        docker_secrets=docker_secrets,
     )

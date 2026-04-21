@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+{% if job_lint %}
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: {% raw %}${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}{% endraw %}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+{% if lint_tool == "flake8" %}
+          pip install flake8 black mypy
+{% else %}
+          pip install ruff mypy
+{% endif %}
+
+{% if lint_tool == "flake8" %}
+      - name: Flake8
+        run: flake8 .
+
+      - name: Black
+        run: black --check .
+{% else %}
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format
+        run: ruff format --check .
+{% endif %}
+      - name: Mypy
+        run: mypy . --ignore-missing-imports
+
+{% endif %}
+{% if job_test %}
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: {% raw %}${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}{% endraw %}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Tests with coverage
+        run: pytest --cov=src --cov-report=xml --cov-fail-under={{ coverage_threshold }}
+{% if test_secret_keys %}
+        env:
+{% for key in test_secret_keys %}
+          {{ key }}: {% raw %}${{ secrets.{% endraw %}{{ key }}{% raw %} }}{% endraw %}
+{% endfor %}
+{% endif %}
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: {% raw %}${{ always() }}{% endraw %}
+        with:
+          files: coverage.xml
+
+{% endif %}
+{% if job_security %}
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Dependency vulnerability scan
+        run: pip-audit -r requirements.txt
+{% if sonar %}
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          GITHUB_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          SONAR_TOKEN: {% raw %}${{ secrets.SONAR_TOKEN }}{% endraw %}
+        with:
+          args: >
+            -Dsonar.projectKey={{ sonar_project_key }}
+            -Dsonar.organization={{ sonar_organization }}
+{% endif %}
+
+{% endif %}
+{% if docker %}
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (verify)
+        uses: docker/build-push-action@v5
+        with:
+          push: false
+{% endif %}
