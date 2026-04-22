@@ -3,10 +3,21 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "forge"
+name = "forge-scaffold"
 version = "0.1.0"
-description = "CLI to scaffold new projects with company standards"
+description = "CLI to scaffold new projects and set up CI/CD pipelines with company standards"
+readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.9"
+authors = [
+    { name = "theo", email = "theo.morin1402@gmail.com" }
+]
+keywords = ["cli", "scaffold", "ci", "cd", "devops", "github-actions"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "typer>=0.12.0",
     "httpx>=0.27.0",
@@ -20,6 +31,10 @@ dependencies = [
     "PyNaCl>=1.5.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/theo-mrn/Scaffolding_CLI"
+Repository = "https://github.com/theo-mrn/Scaffolding_CLI"
+
 [project.scripts]
 forge = "forge.main:app"
 
@@ -30,6 +45,9 @@ dev = [
     "pytest-mock>=3.14.0",
     "respx>=0.21.0",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["forge"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
