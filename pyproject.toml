@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "forge-scaffold"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI to scaffold new projects and set up CI/CD pipelines with company standards"
 readme = "README.md"
 license = { text = "MIT" }
