@@ -23,6 +23,10 @@ def generate_ci(
     cd_job_push: bool = True,
     cd_job_trivy: bool = True,
     cd_job_sbom: bool = True,
+    cd_job_deploy: bool = False,
+    deploy_port: int = 3000,
+    ssh_auth: str = "key",
+    custom_domain: str = "",
 ) -> None:
     env = Environment(
         loader=PackageLoader("forge", "config/templates"),
@@ -54,7 +58,7 @@ def generate_ci(
         return
 
     if docker and (cd_job_build or cd_job_push):
-        cd_ctx = {**ctx, "cd_job_build": cd_job_build, "cd_job_push": cd_job_push, "cd_job_trivy": cd_job_trivy, "cd_job_sbom": cd_job_sbom}
+        cd_ctx = {**ctx, "cd_job_build": cd_job_build, "cd_job_push": cd_job_push, "cd_job_trivy": cd_job_trivy, "cd_job_sbom": cd_job_sbom, "cd_job_deploy": cd_job_deploy, "deploy_port": deploy_port, "ssh_auth": ssh_auth, "custom_domain": custom_domain}
         try:
             cd_template = env.get_template(f"cd/{project_type}.yml.j2")
             (workflows_dir / "cd.yml").write_text(cd_template.render(**cd_ctx))

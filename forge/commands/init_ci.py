@@ -12,6 +12,7 @@ from forge.generators.ci import generate_ci
 from forge.github.branch_protection import set_branch_protection
 from forge.github.secrets import set_repo_secrets
 from forge.github.errors import GitHubError
+from forge.dns.cloudflare import create_a_record, CloudflareError
 
 app = typer.Typer(help="Set up CI/CD pipeline on an existing project.")
 
@@ -82,12 +83,60 @@ def init_ci(
     cd_job_trivy = False
     cd_job_sbom = False
     cd_job_build = False
+    cd_job_deploy = False
+    deploy_port = 3000
+    ssh_auth = "key"
+    custom_domain = ""
     docker_secrets: dict = {}
+    ssh_secrets: dict = {}
     if docker_build_in_ci:
         cd_job_push = typer.confirm("    Push image to Docker Hub?", default=False)
         if cd_job_push:
             cd_job_trivy = typer.confirm("    Trivy CVE scan after push?", default=True)
             cd_job_sbom = typer.confirm("    Generate SBOM?", default=True)
+            cd_job_deploy = typer.confirm("    Deploy via SSH after push?", default=False)
+            if cd_job_deploy:
+                deploy_port = typer.prompt("    Application port", default=3000, type=int)
+                console.print("    [dim]SSH credentials will be stored as GitHub secrets.[/dim]")
+                ssh_host = typer.prompt("    Server IP/host")
+                ssh_port = typer.prompt("    SSH port", default="22")
+                ssh_user = typer.prompt("    SSH user", default="ubuntu")
+                ssh_auth_choice = _ask_choice("    SSH authentication", ["Private key", "Password"])
+                ssh_auth = "key" if ssh_auth_choice == "Private key" else "password"
+                if ssh_auth == "key":
+                    ssh_key = typer.prompt("    SSH private key (paste full key)", hide_input=True)
+                    ssh_secrets = {
+                        "SSH_HOST": ssh_host,
+                        "SSH_PORT": ssh_port,
+                        "SSH_USER": ssh_user,
+                        "SSH_KEY": ssh_key,
+                    }
+                else:
+                    ssh_password = typer.prompt("    SSH password", hide_input=True)
+                    ssh_secrets = {
+                        "SSH_HOST": ssh_host,
+                        "SSH_PORT": ssh_port,
+                        "SSH_USER": ssh_user,
+                        "SSH_PASSWORD": ssh_password,
+                    }
+                    ssh_auth = "password"
+            # --- DNS ---
+            custom_domain = typer.prompt("    Custom domain (leave blank to use IP)", default="")
+            if custom_domain:
+                dns_provider = _ask_choice("    DNS provider", ["Manual", "Cloudflare"])
+                if dns_provider == "Cloudflare":
+                    cf_token = typer.prompt("    Cloudflare API token", hide_input=True)
+                    host = ssh_secrets.get("SSH_HOST", "")
+                    try:
+                        create_a_record(cf_token, custom_domain, host)
+                        console.print(f"    [green]✓[/green] DNS A record created: {custom_domain} → {host}")
+                    except CloudflareError as e:
+                        console.print(f"    [yellow]Warning:[/yellow] Cloudflare DNS failed: {e}")
+                else:
+                    host = ssh_secrets.get("SSH_HOST", "")
+                    console.print(f"    [dim]Add this DNS record at your registrar:[/dim]")
+                    console.print(f"    [dim]  A  {custom_domain}  {host}[/dim]")
+
             docker_username = typer.prompt("    Docker username")
             docker_password = typer.prompt("    Docker password/token", hide_input=True)
             docker_secrets = {
@@ -121,7 +170,7 @@ def init_ci(
         "  Apply branch protection rules on main?", default=True
     )
 
-    all_secrets = {**docker_secrets, **sonar_secrets, **test_secrets}
+    all_secrets = {**docker_secrets, **sonar_secrets, **test_secrets, **ssh_secrets}
     needs_token = setup_branch_protection or bool(all_secrets)
 
     if needs_token:
@@ -159,6 +208,10 @@ def init_ci(
         cd_job_push=cd_job_push,
         cd_job_trivy=cd_job_trivy,
         cd_job_sbom=cd_job_sbom,
+        cd_job_deploy=cd_job_deploy,
+        deploy_port=deploy_port,
+        ssh_auth=ssh_auth if cd_job_deploy else "key",
+        custom_domain=custom_domain,
     )
     console.print("[green]✓[/green] .github/workflows/ci.yml generated")
     console.print("[green]✓[/green] .github/dependabot.yml generated")
@@ -190,6 +243,11 @@ def init_ci(
     console.print("  git add .github/")
     console.print('  git commit -m "ci: add forge pipeline"')
     console.print("  git push")
+    if cd_job_deploy:
+        if custom_domain:
+            console.print(f"\n  Once deployed: [bold cyan]https://{custom_domain}[/bold cyan]")
+        elif ssh_secrets.get("SSH_HOST"):
+            console.print(f"\n  Once deployed: [bold cyan]http://{ssh_secrets['SSH_HOST']}:{deploy_port}[/bold cyan]")
 
 
 def _ask_choice(label: str, choices: list) -> str:

@@ -112,3 +112,39 @@ jobs:
           path: sbom.json
 {% endif %}
 {% endif %}
+
+{% if cd_job_deploy %}
+  deploy:
+    needs: push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: {% raw %}${{ secrets.SSH_HOST }}{% endraw %}
+          port: {% raw %}${{ secrets.SSH_PORT }}{% endraw %}
+          username: {% raw %}${{ secrets.SSH_USER }}{% endraw %}
+{% if ssh_auth == "password" %}
+          password: {% raw %}${{ secrets.SSH_PASSWORD }}{% endraw %}
+{% else %}
+          key: {% raw %}${{ secrets.SSH_KEY }}{% endraw %}
+{% endif %}
+          script: |
+            docker pull {% raw %}${{ secrets.DOCKER_USERNAME }}{% endraw %}/{{ project_name }}:latest
+            docker stop {{ project_name }} || true
+            docker rm {{ project_name }} || true
+{% if custom_domain %}
+            docker run -d --name {{ project_name }} --restart unless-stopped -p 127.0.0.1:{{ deploy_port }}:{{ deploy_port }} {% raw %}${{ secrets.DOCKER_USERNAME }}{% endraw %}/{{ project_name }}:latest
+            which caddy || (apt-get install -y debian-keyring debian-archive-keyring apt-transport-https curl && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list && apt-get update && apt-get install -y caddy)
+            cat > /etc/caddy/Caddyfile << 'CADDYEOF'
+            {{ custom_domain }} {
+              reverse_proxy localhost:{{ deploy_port }}
+            }
+            CADDYEOF
+            systemctl reload caddy || systemctl start caddy
+            echo "✓ Deployed: https://{{ custom_domain }}"
+{% else %}
+            docker run -d --name {{ project_name }} --restart unless-stopped -p {{ deploy_port }}:{{ deploy_port }} {% raw %}${{ secrets.DOCKER_USERNAME }}{% endraw %}/{{ project_name }}:latest
+            echo "✓ Deployed: http://{% raw %}${{ secrets.SSH_HOST }}{% endraw %}:{{ deploy_port }}"
+{% endif %}
+{% endif %}
