@@ -99,6 +99,7 @@ jobs:
 {% if cd_job_trivyhub %}
 
       - name: Scan & push to TrivyHub
+        if: always()
         uses: theo-mrn/trivy_dashboard/.github/actions/trivy-push@main
         with:
           image: {% raw %}${{ fromJSON(steps.meta.outputs.json).tags[0] }}{% endraw %}
