@@ -81,6 +81,7 @@ def init_ci(
     console.print("\n  [bold]CD[/bold]")
     cd_job_push = False
     cd_job_trivy = False
+    cd_job_trivyhub = False
     cd_job_sbom = False
     cd_job_build = False
     cd_job_deploy = False
@@ -89,10 +90,17 @@ def init_ci(
     custom_domain = ""
     docker_secrets: dict = {}
     ssh_secrets: dict = {}
+    trivyhub_secrets: dict = {}
     if docker_build_in_ci:
         cd_job_push = typer.confirm("    Push image to Docker Hub?", default=False)
         if cd_job_push:
             cd_job_trivy = typer.confirm("    Trivy CVE scan after push?", default=True)
+            if cd_job_trivy:
+                cd_job_trivyhub = typer.confirm("    Push scan results to TrivyHub?", default=False)
+                if cd_job_trivyhub:
+                    console.print("    [dim]Get your API key at: https://dashboard.trivyhub.fr[/dim]")
+                    trivyhub_api_key = typer.prompt("    TrivyHub API key", hide_input=True)
+                    trivyhub_secrets = {"TRIVYHUB_API_KEY": trivyhub_api_key}
             cd_job_sbom = typer.confirm("    Generate SBOM?", default=True)
             cd_job_deploy = typer.confirm("    Deploy via SSH after push?", default=False)
             if cd_job_deploy:
@@ -170,7 +178,7 @@ def init_ci(
         "  Apply branch protection rules on main?", default=True
     )
 
-    all_secrets = {**docker_secrets, **sonar_secrets, **test_secrets, **ssh_secrets}
+    all_secrets = {**docker_secrets, **sonar_secrets, **test_secrets, **ssh_secrets, **trivyhub_secrets}
     needs_token = setup_branch_protection or bool(all_secrets)
 
     if needs_token:
@@ -207,6 +215,7 @@ def init_ci(
         cd_job_build=cd_job_build,
         cd_job_push=cd_job_push,
         cd_job_trivy=cd_job_trivy,
+        cd_job_trivyhub=cd_job_trivyhub,
         cd_job_sbom=cd_job_sbom,
         cd_job_deploy=cd_job_deploy,
         deploy_port=deploy_port,

@@ -95,6 +95,15 @@ jobs:
           {%- if project_type in ("node", "react") %}
           skip-dirs: /usr/local/lib/node_modules/npm
           {%- endif %}
+
+{% if cd_job_trivyhub %}
+
+      - name: Scan & push to TrivyHub
+        uses: theo-mrn/trivy_dashboard/.github/actions/trivy-push@main
+        with:
+          image: {% raw %}${{ fromJSON(steps.meta.outputs.json).tags[0] }}{% endraw %}
+          api-key: {% raw %}${{ secrets.TRIVYHUB_API_KEY }}{% endraw %}
+{% endif %}
 {% endif %}
 {% if cd_job_sbom %}
 
